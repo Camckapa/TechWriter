@@ -7,6 +7,6 @@ The portfolio contains:
 - [Rules of the game in the Markdown format](Rule_of_the_game.md).
 - Rules of the game in the Dita format.
 - Rules of the game in the RST format.
-- Rules of the game in the AsciiDoc format.
+- [Rules of the game in the AsciiDoc format](Rule_of_the_game.adoc).
 - Fictional OpenAPI specification for an online game. AI generated.
 - API reference based on a fictional OpenAPI.
