@@ -1,0 +1,448 @@
+openapi: 3.0.2
+info:
+  title: Sea Battle (Battleship) Game API
+  description: API для игры в морской бой 1v1 с пошаговой логикой
+  version: 1.0.0
+  contact:
+    name: Analytics Team
+
+servers:
+  - url: https://api.seabattle.example.com/v1
+    description: Production server
+  - url: http://localhost:8080/v1
+    description: Development server
+
+tags:
+  - name: Games
+    description: Управление играми
+  - name: Fleet
+    description: Расстановка кораблей
+  - name: Moves
+    description: Игровые ходы
+
+components:
+  schemas:
+    # ----- ENUMS -----
+    GameStatus:
+      type: string
+      enum:
+        - waiting_for_player2
+        - placement
+        - active
+        - finished
+      description: |
+        waiting_for_player2 - ожидание второго игрока
+        placement - оба игрока расставляют корабли
+        active - игра идёт
+        finished - игра завершена
+
+    MoveResult:
+      type: string
+      enum: [hit, miss, kill, game_over]
+
+    # ----- DTOs -----
+    Coordinates:
+      type: object
+      required: [x, y]
+      properties:
+        x:
+          type: integer
+          minimum: 0
+          maximum: 9
+          description: Столбец (0 = A)
+        y:
+          type: integer
+          minimum: 0
+          maximum: 9
+          description: Строка (0 = 1)
+      example: { "x": 3, "y": 5 }
+
+    Ship:
+      type: object
+      required: [shipId, cells]
+      properties:
+        shipId:
+          type: string
+          example: "ship-battleship-1"
+        cells:
+          type: array
+          minItems: 1
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/Coordinates'
+
+    ShipPlacementRequest:
+      type: object
+      required: [ships]
+      properties:
+        ships:
+          type: array
+          minItems: 10
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/Ship'
+
+    FleetState:
+      type: object
+      properties:
+        ships:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ship'
+        hits:
+          type: array
+          items:
+            $ref: '#/components/schemas/Coordinates'
+        misses:
+          type: array
+          items:
+            $ref: '#/components/schemas/Coordinates'
+
+    GameStateResponse:
+      type: object
+      properties:
+        gameId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/GameStatus'
+        currentTurn:
+          type: string
+          format: uuid
+          nullable: true
+        winnerId:
+          type: string
+          format: uuid
+          nullable: true
+        myBoard:
+          $ref: '#/components/schemas/FleetState'
+        enemyBoard:
+          type: object
+          properties:
+            hits:
+              type: array
+              items:
+                $ref: '#/components/schemas/Coordinates'
+            misses:
+              type: array
+              items:
+                $ref: '#/components/schemas/Coordinates'
+
+    CreateGameRequest:
+      type: object
+      properties:
+        player1Id:
+          type: string
+          format: uuid
+          description: ID инициатора
+        player2Id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Если null — ждём второго игрока
+      required: [player1Id]
+
+    CreateGameResponse:
+      type: object
+      properties:
+        gameId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/GameStatus'
+        currentTurn:
+          type: string
+          format: uuid
+          nullable: true
+
+    MoveRequest:
+      type: object
+      required: [playerId, target]
+      properties:
+        playerId:
+          type: string
+          format: uuid
+        target:
+          $ref: '#/components/schemas/Coordinates'
+
+    MoveResponse:
+      type: object
+      properties:
+        result:
+          $ref: '#/components/schemas/MoveResult'
+        shipKilled:
+          type: string
+          nullable: true
+          description: ID убитого корабля (если result = kill)
+        gameStatus:
+          $ref: '#/components/schemas/GameStatus'
+        winnerId:
+          type: string
+          format: uuid
+          nullable: true
+        nextTurn:
+          type: string
+          format: uuid
+          nullable: true
+
+    SurrenderRequest:
+      type: object
+      required: [playerId]
+      properties:
+        playerId:
+          type: string
+          format: uuid
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: string
+
+    GameSummary:
+      type: object
+      properties:
+        gameId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/GameStatus'
+        players:
+          type: array
+          items:
+            type: string
+            format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+  parameters:
+    GameIdParam:
+      name: gameId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: UUID игры
+
+    PlayerIdParam:
+      name: playerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Неверный запрос (некорректные координаты, повторный выстрел и т.д.)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Игра или игрок не найдены
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Не ваш ход или игра уже завершена
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Игрок не принадлежит этой игре
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+paths:
+  # ----- УПРАВЛЕНИЕ ИГРАМИ -----
+  /games:
+    post:
+      tags: [Games]
+      summary: Создать новую игру
+      operationId: createGame
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGameRequest'
+      responses:
+        '201':
+          description: Игра создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateGameResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+    get:
+      tags: [Games]
+      summary: Получить список игр
+      operationId: listGames
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/GameStatus'
+          description: Фильтр по статусу
+      responses:
+        '200':
+          description: Список игр
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GameSummary'
+
+  /games/{gameId}:
+    get:
+      tags: [Games]
+      summary: Получить информацию об игре
+      operationId: getGameInfo
+      parameters:
+        - $ref: '#/components/parameters/GameIdParam'
+      responses:
+        '200':
+          description: Информация об игре
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateGameResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ----- РАССТАНОВКА КОРАБЛЕЙ -----
+  /games/{gameId}/fleet/{playerId}:
+    put:
+      tags: [Fleet]
+      summary: Расставить корабли
+      operationId: placeFleet
+      parameters:
+        - $ref: '#/components/parameters/GameIdParam'
+        - $ref: '#/components/parameters/PlayerIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShipPlacementRequest'
+      responses:
+        '200':
+          description: Корабли успешно расставлены
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Игра уже в статусе active или finished
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----- ИГРОВЫЕ ХОДЫ -----
+  /games/{gameId}/state/{playerId}:
+    get:
+      tags: [Games]
+      summary: Получить текущее состояние игры для игрока
+      operationId: getGameState
+      parameters:
+        - $ref: '#/components/parameters/GameIdParam'
+        - $ref: '#/components/parameters/PlayerIdParam'
+      responses:
+        '200':
+          description: Текущее состояние досок
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameStateResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /games/{gameId}/move:
+    post:
+      tags: [Moves]
+      summary: Совершить ход (выстрел)
+      operationId: makeMove
+      parameters:
+        - $ref: '#/components/parameters/GameIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveRequest'
+      responses:
+        '200':
+          description: Результат выстрела
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoveResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Не ваш ход или игра уже завершена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /games/{gameId}/surrender:
+    post:
+      tags: [Games]
+      summary: Сдаться в игре
+      operationId: surrender
+      parameters:
+        - $ref: '#/components/parameters/GameIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SurrenderRequest'
+      responses:
+        '200':
+          description: Игра завершена, победа присуждена сопернику
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  gameId:
+                    type: string
+                  winnerId:
+                    type: string
+                  status:
+                    type: string
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Игра уже завершена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
