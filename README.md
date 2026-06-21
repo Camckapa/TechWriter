@@ -7,7 +7,7 @@ The portfolio contains:
 - [Rules of the game in the Markdown format](Rule_of_the_game.md).<!-- Reusing off -->
 - [Rules of the game in the Dita format](Rule_of_the_game.dita).<!-- With reuse -->
 > GitHub doesn't support visualizing DITA XML source code as rendered HTML pages by default. Preview isn't configured in the project. Topic written in Oxygen XML Editor.
-- Rules of the game in the RST format.
+- [Rules of the game in the RST format](Rule_of_the_game.rst).<!-- Reusing off -->
 - [Rules of the game in the AsciiDoc format](Rule_of_the_game.adoc).<!-- With reuse -->
 - Fictional OpenAPI specification for an online game. AI generated.
 - API reference based on a fictional OpenAPI.
