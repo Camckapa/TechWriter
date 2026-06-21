@@ -1,1 +1,538 @@
+= Sea Battle (Battleship) Game API
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 4
+:numbered:
 
+ifndef::env-github[]
+:tip-caption: 💡
+:note-caption: ℹ️
+:important-caption: ⚠️
+:caution-caption: 🔥
+:warning-caption: 🛑
+endif::[]
+
+== Общая информация
+
+API для игры в «Морской бой» (1v1, пошаговая логика).
+
+**Версия:** 1.0.0  
+**Контакты:** Analytics Team
+
+=== Базовые URL
+
+[options="header"]
+|===
+| Окружение | URL
+| Production | `https://api.seabattle.example.com/v1`
+| Development | `http://localhost:8080/v1`
+|===
+
+=== Схемы данных
+
+==== `GameStatus`
+
+Статус игры.
+
+[options="header"]
+|===
+| Значение | Описание
+| `waiting_for_player2` | Ожидание второго игрока
+| `placement` | Оба игрока расставляют корабли
+| `active` | Игра идёт
+| `finished` | Игра завершена
+|===
+
+==== `MoveResult`
+
+Результат выстрела.
+
+[options="header"]
+|===
+| Значение | Описание
+| `hit` | Попадание
+| `miss` | Промах
+| `kill` | Корабль уничтожен
+| `game_over` | Игра окончена (победа)
+|===
+
+==== `Coordinates`
+
+Координаты клетки на поле 10×10.
+
+[source,json]
+----
+{
+  "x": 3,  // столбец (0..9, 0 = A)
+  "y": 5   // строка (0..9, 0 = 1)
+}
+----
+
+==== `Ship`
+
+Модель корабля.
+
+[source,json]
+----
+{
+  "shipId": "ship-battleship-1",
+  "cells": [
+    {"x": 0, "y": 0},
+    {"x": 0, "y": 1},
+    {"x": 0, "y": 2},
+    {"x": 0, "y": 3}
+  ]
+}
+----
+
+==== `ShipPlacementRequest`
+
+Запрос на расстановку флота (ровно 10 кораблей).
+
+[source,json]
+----
+{
+  "ships": [
+    // массив Ship
+  ]
+}
+----
+
+==== `FleetState`
+
+Состояние флота игрока.
+
+[source,json]
+----
+{
+  "ships": [],   // все корабли игрока
+  "hits": [],    // координаты попаданий
+  "misses": []   // координаты промахов
+}
+----
+
+==== `GameStateResponse`
+
+Полное состояние игры для конкретного игрока.
+
+[source,json]
+----
+{
+  "gameId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "active",
+  "currentTurn": "uuid-player1",
+  "winnerId": null,
+  "myBoard": {
+    "ships": [...],
+    "hits": [...],
+    "misses": [...]
+  },
+  "enemyBoard": {
+    "hits": [...],
+    "misses": [...]
+  }
+}
+----
+
+==== `CreateGameRequest`
+
+Запрос на создание игры.
+
+[source,json]
+----
+{
+  "player1Id": "uuid-инициатора",
+  "player2Id": null  // null — ждём второго
+}
+----
+
+==== `CreateGameResponse`
+
+Ответ при создании игры.
+
+[source,json]
+----
+{
+  "gameId": "uuid",
+  "status": "waiting_for_player2",
+  "currentTurn": null
+}
+----
+
+==== `MoveRequest`
+
+Запрос на выстрел.
+
+[source,json]
+----
+{
+  "playerId": "uuid-игрока",
+  "target": {"x": 3, "y": 5}
+}
+----
+
+==== `MoveResponse`
+
+Результат выстрела.
+
+[source,json]
+----
+{
+  "result": "hit",
+  "shipKilled": null,        // ID корабля при kill
+  "gameStatus": "active",
+  "winnerId": null,
+  "nextTurn": "uuid-следующего"
+}
+----
+
+==== `SurrenderRequest`
+
+Запрос на сдачу.
+
+[source,json]
+----
+{
+  "playerId": "uuid-игрока"
+}
+----
+
+==== `ErrorResponse`
+
+Стандартный ответ об ошибке.
+
+[source,json]
+----
+{
+  "error": "Описание ошибки",
+  "code": "ERROR_CODE",
+  "details": "Дополнительная информация"
+}
+----
+
+==== `GameSummary`
+
+Краткая информация об игре.
+
+[source,json]
+----
+{
+  "gameId": "uuid",
+  "status": "waiting_for_player2",
+  "players": ["uuid1"],
+  "createdAt": "2026-06-14T12:00:00Z"
+}
+----
+
+== Коды ответов
+
+[options="header"]
+|===
+| Код | Описание
+| `200` | Успешный запрос
+| `201` | Ресурс создан
+| `400` | Неверный запрос (некорректные координаты, повторный выстрел и т.д.)
+| `403` | Игрок не принадлежит этой игре
+| `404` | Игра или игрок не найдены
+| `409` | Не ваш ход, игра уже завершена или занята
+|===
+
+== Эндпоинты
+
+=== Управление играми (`/games`)
+
+==== `POST /games` — Создать новую игру
+
+**Теги:** `Games`  
+**OperationId:** `createGame`
+
+.Request Body
+[source,json]
+----
+{
+  "player1Id": "uuid-инициатора",
+  "player2Id": null
+}
+----
+
+.Responses
+* `201 Created` — игра создана
++
+[source,json]
+----
+{
+  "gameId": "uuid",
+  "status": "waiting_for_player2",
+  "currentTurn": null
+}
+----
+* `400 Bad Request` — ошибка валидации
+
+==== `GET /games` — Получить список игр
+
+**Теги:** `Games`  
+**OperationId:** `listGames`
+
+.Parameters (Query)
+[options="header"]
+|===
+| Параметр | Тип | Описание
+| `status` | `GameStatus` | Фильтр по статусу игры
+|===
+
+.Responses
+* `200 OK` — список игр
++
+[source,json]
+----
+[
+  {
+    "gameId": "uuid",
+    "status": "waiting_for_player2",
+    "players": ["uuid1"],
+    "createdAt": "2026-06-14T12:00:00Z"
+  }
+]
+----
+
+==== `GET /games/{gameId}` — Получить информацию об игре
+
+**Теги:** `Games`  
+**OperationId:** `getGameInfo`
+
+.Parameters (Path)
+[options="header"]
+|===
+| Параметр | Тип | Описание
+| `gameId` | `uuid` | UUID игры
+|===
+
+.Responses
+* `200 OK` — информация об игре
++
+[source,json]
+----
+{
+  "gameId": "uuid",
+  "status": "waiting_for_player2",
+  "currentTurn": null
+}
+----
+* `404 Not Found` — игра не найдена
+
+=== Расстановка кораблей (`/fleet`)
+
+==== `PUT /games/{gameId}/fleet/{playerId}` — Расставить корабли
+
+**Теги:** `Fleet`  
+**OperationId:** `placeFleet`
+
+.Parameters (Path)
+[options="header"]
+|===
+| Параметр | Тип | Описание
+| `gameId` | `uuid` | UUID игры
+| `playerId` | `uuid` | UUID игрока
+|===
+
+.Request Body
+[source,json]
+----
+{
+  "ships": [
+    {
+      "shipId": "ship-1",
+      "cells": [
+        {"x": 0, "y": 0},
+        {"x": 0, "y": 1}
+      ]
+    }
+  ]
+}
+----
+
+.Responses
+* `200 OK` — корабли успешно расставлены
+* `400 Bad Request` — неверная расстановка (касание, размер, выход за поле)
+* `403 Forbidden` — игрок не принадлежит игре
+* `404 Not Found` — игра или игрок не найдены
+* `409 Conflict` — игра уже активна или завершена
+
+=== Игровые ходы (`/move`, `/state`)
+
+==== `GET /games/{gameId}/state/{playerId}` — Получить состояние игры
+
+**Теги:** `Games`  
+**OperationId:** `getGameState`
+
+.Parameters (Path)
+[options="header"]
+|===
+| Параметр | Тип | Описание
+| `gameId` | `uuid` | UUID игры
+| `playerId` | `uuid` | UUID игрока (чей взгляд)
+|===
+
+.Responses
+* `200 OK` — состояние досок
++
+[source,json]
+----
+{
+  "gameId": "uuid",
+  "status": "active",
+  "currentTurn": "uuid-player1",
+  "winnerId": null,
+  "myBoard": {
+    "ships": [...],
+    "hits": [...],
+    "misses": [...]
+  },
+  "enemyBoard": {
+    "hits": [...],
+    "misses": [...]
+  }
+}
+----
+* `403 Forbidden` — игрок не принадлежит игре
+* `404 Not Found` — игра или игрок не найдены
+
+==== `POST /games/{gameId}/move` — Совершить ход (выстрел)
+
+**Теги:** `Moves`  
+**OperationId:** `makeMove`
+
+.Parameters (Path)
+[options="header"]
+|===
+| Параметр | Тип | Описание
+| `gameId` | `uuid` | UUID игры
+|===
+
+.Request Body
+[source,json]
+----
+{
+  "playerId": "uuid-игрока",
+  "target": {"x": 3, "y": 5}
+}
+----
+
+.Responses
+* `200 OK` — результат выстрела
++
+[source,json]
+----
+{
+  "result": "hit",
+  "shipKilled": null,
+  "gameStatus": "active",
+  "winnerId": null,
+  "nextTurn": "uuid-player1"
+}
+----
+* `400 Bad Request` — повторный выстрел или некорректные координаты
+* `403 Forbidden` — игрок не принадлежит игре
+* `404 Not Found` — игра или игрок не найдены
+* `409 Conflict` — не ваш ход или игра завершена
+
+=== Завершение игры
+
+==== `POST /games/{gameId}/surrender` — Сдаться
+
+**Теги:** `Games`  
+**OperationId:** `surrender`
+
+.Parameters (Path)
+[options="header"]
+|===
+| Параметр | Тип | Описание
+| `gameId` | `uuid` | UUID игры
+|===
+
+.Request Body
+[source,json]
+----
+{
+  "playerId": "uuid-игрока"
+}
+----
+
+.Responses
+* `200 OK` — игра завершена
++
+[source,json]
+----
+{
+  "gameId": "uuid",
+  "winnerId": "uuid-соперника",
+  "status": "finished"
+}
+----
+* `403 Forbidden` — игрок не принадлежит игре
+* `404 Not Found` — игра или игрок не найдены
+* `409 Conflict` — игра уже завершена
+
+== Дополнительные рекомендации
+
+=== WebSocket (опционально)
+
+Для real-time уведомлений рекомендуется использовать WebSocket:
+
+[source]
+----
+WS /ws/games/{gameId}
+----
+
+События:
+* `opponent_move` — соперник сходил
+* `your_turn` — ваш ход
+* `game_finished` — игра завершена
+* `player_joined` — второй игрок присоединился
+
+=== Поля для аналитики (расширение)
+
+Рекомендуется добавить в ответы:
+
+[source,json]
+----
+{
+  "moveNumber": 42,
+  "timestamp": "2026-06-14T12:00:00Z",
+  "remainingShipsPlayer1": 3,
+  "remainingShipsPlayer2": 5
+}
+----
+
+=== Метрики (отдельный эндпоинт)
+
+[source]
+----
+GET /metrics/games/{gameId}
+----
+
+Возвращает:
+* Длительность игры
+* Количество ходов
+* Точность стрельбы каждого игрока
+* Время ожидания между ходами
+
+=== Схема БД для аналитики
+
+[options="header"]
+|===
+| Таблица | Поля
+| `games` | `id`, `status`, `current_turn`, `winner_id`, `created_at`, `finished_at`
+| `players` | `game_id`, `player_id`, `fleet_json`, `hits`, `misses`
+| `moves` | `id`, `game_id`, `player_id`, `x`, `y`, `result`, `move_number`, `timestamp`
+|===
+
+== История изменений
+
+[options="header"]
+|===
+| Версия | Дата | Изменения
+| 1.0.0 | 2026-06-14 | Первоначальная спецификация
+|===
