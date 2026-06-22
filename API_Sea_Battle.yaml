@@ -1,3 +1,5 @@
+# Для получения интерактивного документа загрузите эту спецификацию в онлайн-сервис https://redocly.github.io/redoc/
+
 openapi: 3.0.2
 info:
   title: Sea Battle (Battleship) Game API
