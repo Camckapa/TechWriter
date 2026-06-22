@@ -92,7 +92,7 @@ RESPONSE SCHEMA: `application/json`
 # Fleet
 Управление кораблями
 
-<a id="Set_Fleet"></a
+<a id="Set_Fleet"></a>
 ## Расстановка кораблей
 
 <a id="Moves"></a>
