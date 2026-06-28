@@ -19,9 +19,9 @@
 
 Каждое HTTP-сообщение состоит из:
 
-1. :ref: `Стартовой строки <starting_line>`.
-2. :ref: `Заголовков <headers>`.
-3. :ref: `Тела сообщения <message_Body>`.
+1. :ref:`Стартовой строки <starting_line>`.
+2. :ref:`Заголовков <headers>`.
+3. :ref:`Тела сообщения <message_Body>`.
 
 .. _starting_line:
 
